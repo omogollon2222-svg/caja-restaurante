@@ -176,6 +176,7 @@ textarea.notes{width:100%;min-height:64px;padding:9px 10px;border:1px solid var(
       <p class="form-note" id="form-note">Registra lo vendido hoy por forma de pago.</p>
 
       <div class="group-t">Ventas por forma de pago</div>
+      <button type="button" class="btn primary" id="close-day" style="width:100%;margin:2px 0 6px">Cerrar caja del día</button>
       <button type="button" class="link-btn pull" id="pull-pos">Traer ventas del punto de venta</button>
       <div id="methods"></div>
       <div class="total-line"><span>Total vendido</span><b id="f-total">$0,00</b></div>
@@ -394,6 +395,29 @@ $("#pull-pos").addEventListener("click",async()=>{
     }
   }catch(e){toast("No se pudieron traer las ventas. Revisa tu conexión.");}
   b.disabled=false;
+});
+
+/* ---------- Cerrar caja: trae las ventas del día y guarda el cierre ---------- */
+$("#close-day").addEventListener("click",async()=>{
+  if(!db){toast("Conéctate a internet para cerrar la caja.");return;}
+  if(selDate>todayISO()){toast("No se pueden registrar días futuros.");return;}
+  const b=$("#close-day");b.disabled=true;b.textContent="Cerrando…";
+  try{
+    const snap=await db.collection("sales").where("date","==",selDate).get();
+    const by={efectivo:0,tarjeta:0,transferencia:0};let n=0;
+    snap.docs.forEach(d=>{((d.data()||{}).sales||[]).forEach(s=>{
+      const k=String(s.pago||"").toLowerCase();
+      if(k in by)by[k]+=Number(s.total)||0;else by.efectivo+=Number(s.total)||0;
+      n++;
+    });});
+    if(!n){toast("No hay ventas registradas ese día.");}
+    else{
+      Object.keys(by).forEach(k=>{const v=Math.round(by[k]*100)/100;$("#m-"+k).value=v?v:"";});
+      $("#f-tickets").value=n;dirty=true;updateCalc();
+      $("#f-save").click();
+    }
+  }catch(e){toast("No se pudo cerrar la caja. Revisa tu conexión.");}
+  b.disabled=false;b.textContent="Cerrar caja del día";
 });
 
 /* ---------- Resumen del mes ---------- */
