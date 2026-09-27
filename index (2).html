@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Restaurante</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍽️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&display=swap">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="config.js"></script>
+<style>
+:root{
+  --bg:#f3f5ef;--surface:#fff;--surface-2:#e8ece2;--line:#d5dccd;
+  --ink:#18261e;--ink-2:#4a5a50;--ink-3:#7a877e;
+  --accent:#1f6b4a;--accent-ink:#fff;--accent-soft:#dcebe2;--bad:#b3261e;
+  --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --body:"Figtree",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#111713;--surface:#18201b;--surface-2:#222c25;--line:#2f3b33;
+  --ink:#e9efe9;--ink-2:#b3c0b6;--ink-3:#839087;
+  --accent:#4fb487;--accent-ink:#0c1a12;--accent-soft:#1f3a2c;--bad:#ff8a80;
+}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--body);display:flex;flex-direction:column}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+
+/* ingreso */
+.gate{flex:1;display:grid;place-items:center;padding:24px 16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:28px 24px;width:100%;max-width:380px;display:flex;flex-direction:column;gap:14px}
+.mark{width:48px;height:48px;border-radius:14px;background:var(--accent);display:grid;place-items:center;font-size:24px}
+.card h1{font-family:var(--display);font-weight:800;font-size:26px;margin:0;letter-spacing:-.01em;line-height:1.1}
+.card p{margin:0;color:var(--ink-2)}
+.field{display:flex;flex-direction:column;gap:4px}
+.field span{font-size:13px;font-weight:600;color:var(--ink-2)}
+.inp{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:11px 12px;width:100%}
+.inp:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 14px;font-weight:600}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);padding:12px}
+.btn:disabled{opacity:.5;cursor:wait}
+.link{border:0;background:none;color:var(--accent);font-weight:600;padding:0;text-align:left}
+.msg{font-size:14px;min-height:20px;color:var(--ink-2)}
+.msg.err{color:var(--bad)}
+
+/* app */
+.bar{display:flex;align-items:center;gap:12px;padding:8px 16px;border-bottom:1px solid var(--line);background:var(--bg);flex-wrap:wrap}
+.who{display:flex;align-items:center;gap:10px;margin-right:auto;min-width:0}
+.who .mark{width:34px;height:34px;border-radius:10px;font-size:18px;flex:none}
+.who b{font-family:var(--display);font-weight:800;font-size:18px;display:block;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.who small{color:var(--ink-3);font-size:12px}
+.tabs{display:flex;background:var(--surface-2);border-radius:12px;padding:3px;gap:2px}
+.tab{border:0;background:transparent;padding:8px 16px;border-radius:9px;font-weight:600;color:var(--ink-2)}
+.tab[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.frames{flex:1;position:relative;min-height:0}
+.frames iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--bg)}
+@media (max-width:560px){
+  .bar{gap:8px;padding:8px 12px}
+  .tabs{order:3;width:100%}
+  .tab{flex:1}
+}
+</style>
+</head>
+<body>
+
+<!-- Ingreso -->
+<section class="gate" id="login" hidden>
+  <form class="card" id="loginForm" novalidate>
+    <div class="mark" aria-hidden="true">🍽️</div>
+    <div><h1 id="appName">Restaurante</h1><p>Ingresa con la cuenta de tu restaurante.</p></div>
+    <label class="field"><span>Correo</span><input class="inp" id="email" type="email" autocomplete="username" required></label>
+    <label class="field"><span>Contraseña</span><input class="inp" id="pass" type="password" autocomplete="current-password" required></label>
+    <button class="btn pri" id="enter" type="submit">Ingresar</button>
+    <button class="link" id="forgot" type="button">Olvidé mi contraseña</button>
+    <div class="msg" id="loginMsg" role="status"></div>
+  </form>
+</section>
+
+<!-- Cuenta bloqueada -->
+<section class="gate" id="blocked" hidden>
+  <div class="card">
+    <div class="mark" aria-hidden="true">🔒</div>
+    <div><h1 id="blockTitle">Cuenta no activa</h1><p id="blockText"></p></div>
+    <a class="btn pri" id="blockWa" target="_blank" rel="noopener" style="text-align:center;text-decoration:none">Escribir a soporte por WhatsApp</a>
+    <button class="btn" id="blockOut" type="button">Salir</button>
+  </div>
+</section>
+
+<!-- App -->
+<header class="bar" id="bar" hidden>
+  <div class="who"><div class="mark" aria-hidden="true">🍽️</div><div style="min-width:0"><b id="rName">Restaurante</b><small id="rSub"></small></div></div>
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" data-f="ventas" aria-selected="true">Ventas</button>
+    <button class="tab" role="tab" data-f="caja" aria-selected="false">Caja diaria</button>
+  </nav>
+  <button class="btn" id="logout" type="button">Salir</button>
+</header>
+<main class="frames" id="frames" hidden></main>
+
+<script>
+(function(){
+"use strict";
+const $ = s => document.querySelector(s);
+firebase.initializeApp(window.FIREBASE_CONFIG);
+const auth = firebase.auth(), fs = firebase.firestore();
+const ready = fs.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+const name = window.APP_NOMBRE || "Restaurante";
+document.title = name; $("#appName").textContent = name;
+
+function show(id){ ["login","blocked"].forEach(x => $("#"+x).hidden = x !== id); const app = id === "app"; $("#bar").hidden = !app; $("#frames").hidden = !app; }
+function msg(t, err){ const m = $("#loginMsg"); m.textContent = t || ""; m.classList.toggle("err", !!err); }
+const authErr = c => ({
+  "auth/invalid-credential":"Correo o contraseña incorrectos.",
+  "auth/wrong-password":"Correo o contraseña incorrectos.",
+  "auth/user-not-found":"Correo o contraseña incorrectos.",
+  "auth/invalid-email":"Revisa el correo: no tiene un formato válido.",
+  "auth/too-many-requests":"Demasiados intentos. Espera unos minutos e inténtalo otra vez.",
+  "auth/network-request-failed":"Sin conexión a internet. Revisa tu red.",
+  "auth/unauthorized-domain":"Este sitio no está autorizado en Firebase. Agrega el dominio en Authentication → Configuración → Dominios autorizados.",
+  "auth/operation-not-allowed":"El ingreso con correo no está habilitado. Actívalo en Authentication → Método de acceso.",
+  "auth/configuration-not-found":"Authentication no está activado en este proyecto de Firebase. Ve a Authentication y toca Comenzar.",
+  "auth/api-key-not-valid.-please-pass-a-valid-api-key.":"La clave de config.js no es válida. Revisa que config.js tenga tus datos de Firebase.",
+  "auth/invalid-api-key":"La clave de config.js no es válida. Revisa que config.js tenga tus datos de Firebase.",
+  "auth/user-disabled":"Esta cuenta está deshabilitada."
+})[c] || ("No se pudo ingresar. Código: " + (c || "desconocido"));
+
+$("#loginForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const email = $("#email").value.trim(), pass = $("#pass").value;
+  if (!email || !pass) { msg("Escribe tu correo y contraseña.", true); return; }
+  $("#enter").disabled = true; msg("Ingresando…");
+  try { await auth.signInWithEmailAndPassword(email, pass); msg(""); }
+  catch (err) { console.error(err); msg(authErr(err.code), true); }
+  $("#enter").disabled = false;
+});
+$("#forgot").addEventListener("click", async () => {
+  const email = $("#email").value.trim();
+  if (!email) { msg("Escribe tu correo arriba y vuelve a tocar “Olvidé mi contraseña”.", true); return; }
+  try { await auth.sendPasswordResetEmail(email); msg("Te enviamos un correo para crear una nueva contraseña."); }
+  catch (err) { msg(authErr(err.code), true); }
+});
+const out = () => auth.signOut().then(() => location.reload());
+$("#logout").onclick = out; $("#blockOut").onclick = out;
+
+function block(title, text){
+  $("#blockTitle").textContent = title; $("#blockText").textContent = text;
+  const wa = window.APP_SOPORTE_WHATSAPP;
+  $("#blockWa").hidden = !wa;
+  if (wa) $("#blockWa").href = "https://wa.me/" + wa + "?text=" + encodeURIComponent("Hola, necesito ayuda con mi cuenta de " + name + " (" + (auth.currentUser && auth.currentUser.email) + ")");
+  show("blocked");
+}
+
+const frames = {};
+function openFrame(key){
+  if (!frames[key]) {
+    const f = document.createElement("iframe");
+    f.src = key + ".html"; f.title = key === "ventas" ? "Ventas" : "Caja diaria";
+    $("#frames").appendChild(f); frames[key] = f;
+  }
+  Object.entries(frames).forEach(([k, f]) => f.hidden = k !== key);
+  document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-selected", String(t.dataset.f === key)));
+  try { localStorage.setItem("tab", key); } catch {}
+}
+document.querySelector(".tabs").addEventListener("click", e => { const t = e.target.closest(".tab"); if (t) openFrame(t.dataset.f); });
+
+auth.onAuthStateChanged(async user => {
+  if (!user) { show("login"); return; }
+  let r = null;
+  await ready;
+  try { const snap = await fs.collection("restaurantes").doc(user.uid).get(); r = snap.exists ? snap.data() : null; }
+  catch (err) { block("No se pudo verificar tu cuenta", "Revisa tu conexión a internet e inténtalo de nuevo."); return; }
+  if (!r) { block("Cuenta no activa", "Tu cuenta todavía no está activada. Escríbenos para activarla."); return; }
+  const vence = r.vence && r.vence.toDate ? r.vence.toDate() : null;
+  if (!vence || vence < new Date()) { block("Suscripción vencida", "Tu suscripción terminó" + (vence ? " el " + vence.toLocaleDateString("es") : "") + ". Renueva para seguir registrando ventas; tus datos están guardados."); return; }
+  $("#rName").textContent = r.nombre || user.email;
+  const dias = Math.ceil((vence - new Date()) / 864e5);
+  $("#rSub").textContent = dias <= 7 ? "Tu suscripción vence en " + dias + (dias === 1 ? " día" : " días") : user.email;
+  show("app");
+  let last = "ventas"; try { last = localStorage.getItem("tab") || "ventas"; } catch {}
+  openFrame(last === "caja" ? "caja" : "ventas");
+});
+})();
+</script>
+</body>
+</html>
