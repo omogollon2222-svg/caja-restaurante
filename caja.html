@@ -362,7 +362,7 @@ $("#f-save").addEventListener("click",async()=>{
   const prev=days[selDate];
   const data={date:selDate,...f,updatedAt:Date.now(),createdAt:prev&&prev.createdAt?prev.createdAt:Date.now()};
   const btn=$("#f-save");btn.disabled=true;
-  try{await putDay(selDate,data);dirty=false;toast("Cierre guardado: "+money(totalOf(f)));}
+  try{await putDay(selDate,data);dirty=false;fillForm();toast("Cierre guardado: "+money(totalOf(f)));}
   catch(e){toast(errMsg(e));}
   btn.disabled=false;
 });
