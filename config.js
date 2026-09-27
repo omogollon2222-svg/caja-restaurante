@@ -16,4 +16,4 @@ window.APP_NOMBRE = "Caja Restaurante";
 
 // Tu WhatsApp de soporte, con código de país y sin "+" ni espacios
 // (cámbialo por tu número real)
-window.APP_SOPORTE_WHATSAPP = "593900000000";
+window.APP_SOPORTE_WHATSAPP = "593999636867";
