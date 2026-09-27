@@ -156,7 +156,7 @@ const frames = {};
 function openFrame(key){
   if (!frames[key]) {
     const f = document.createElement("iframe");
-    f.name = "f-" + key; f.src = key + ".html?v=3"; f.title = key === "ventas" ? "Ventas" : "Caja diaria";
+    f.name = "f-" + key; f.src = key + ".html?v=4"; f.title = key === "ventas" ? "Ventas" : "Caja diaria";
     $("#frames").appendChild(f); frames[key] = f;
   }
   Object.entries(frames).forEach(([k, f]) => f.hidden = k !== key);
