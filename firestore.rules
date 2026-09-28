@@ -1,0 +1,30 @@
+// Copia de las reglas publicadas en Firebase (Firestore > Reglas), 27-sep-2026.
+// Si cambias las reglas en la consola, actualiza también este archivo.
+//
+// - Cada restaurante solo ve sus propios datos (restaurantes/{uid}).
+// - Nadie puede editar su ficha (nombre, vence): solo el administrador desde la consola.
+// - Con la suscripción vencida puede ver sus datos, pero no registrar ni borrar nada.
+// - Todo lo que no está aquí queda cerrado.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function activo(uid) {
+      let r = get(/databases/$(database)/documents/restaurantes/$(uid)).data;
+      return r.vence is timestamp && request.time < r.vence;
+    }
+    function esDueno(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    match /restaurantes/{uid} {
+      allow read: if esDueno(uid);
+      allow write: if false;
+
+      match /{coleccion}/{docId} {
+        allow read: if esDueno(uid) && coleccion in ['products', 'sales', 'days'];
+        allow write: if esDueno(uid) && coleccion in ['products', 'sales', 'days'] && activo(uid);
+      }
+    }
+  }
+}
