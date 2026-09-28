@@ -21,6 +21,18 @@
     };
   }
 
+  // true si restaurantes/{uid}.vence es una fecha futura.
+  async function activa(uid) {
+    try {
+      const snap = await fs.collection("restaurantes").doc(uid).get();
+      const v = snap.exists ? snap.data().vence : null;
+      const fecha = v && v.toDate ? v.toDate() : null;
+      return !!fecha && fecha > new Date();
+    } catch (e) {
+      return false;
+    }
+  }
+
   const downloads = {
     save({ filename, data }) {
       const blob = new Blob([data], { type: "text/csv;charset=utf-8" });
@@ -41,6 +53,8 @@
         await ready;
         const u = await firstUser;
         if (!u) { (window.top || window).location.href = "index.html"; return new Promise(() => {}); }
+        // Sin suscripción vigente no se abre la app (las reglas de Firestore también lo bloquean).
+        if (!(await activa(u.uid))) { (window.top || window).location.href = "index.html"; return new Promise(() => {}); }
         return scoped(u.uid);
       }
       return null;
