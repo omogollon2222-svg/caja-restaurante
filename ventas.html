@@ -91,6 +91,8 @@ h2{font-family:var(--display);font-weight:600;font-size:17px;margin:0;letter-spa
 .pill.low{background:var(--warn-bg);color:var(--warn)}
 .pill.out{background:var(--bad-bg);color:var(--bad)}
 .pill.na{background:var(--surface-2);color:var(--ink-3)}
+.pill.prep{background:color-mix(in srgb,var(--cat-Comida) 14%,var(--surface));color:var(--cat-Comida)}
+.pbtn .prep{font-size:12px;color:var(--cat-Comida);font-weight:600}
 .banner{border:1px dashed var(--line);background:var(--surface-2);border-radius:12px;padding:10px 12px;font-size:13px;color:var(--ink-2);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 
 /* VENDER */
@@ -160,6 +162,8 @@ td.r,th.r{text-align:right}
 .field{display:flex;flex-direction:column;gap:4px}
 .field span{font-size:12px;font-weight:600;color:var(--ink-2)}
 .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.fgrid>*{min-width:0}
+.fgrid .inp{width:100%}
 .sheet .acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 textarea.inp{width:100%;min-height:140px;font-family:var(--mono);font-size:12px}
 
@@ -292,6 +296,7 @@ textarea.inp{width:100%;min-height:140px;font-family:var(--mono);font-size:12px}
       <input class="inp" id="invSearch" placeholder="Buscar por código o nombre">
       <select class="inp" id="invCat" style="flex:0 0 auto"><option value="">Todas las categorías</option></select>
       <button class="btn pri" id="btnNew">+ Producto</button>
+      <button class="btn" id="btnNewDish">+ Plato a la carta</button>
       <button class="btn" id="btnImport">Cargar inventario (CSV)</button>
       <button class="btn" id="btnExpInv">Descargar inventario</button>
       <button class="btn" id="btnExpSales2">Descargar ventas</button>
@@ -303,7 +308,7 @@ textarea.inp{width:100%;min-height:140px;font-family:var(--mono);font-size:12px}
         <tbody id="invBody"></tbody>
       </table>
     </div>
-    <p class="muted" style="font-size:13px">El stock baja solo con cada venta. Usa <b>Cargar</b> para sumar lo que llega del proveedor y <b>Ajustar</b> cuando hagas conteo físico.</p>
+    <p class="muted" style="font-size:13px">Los <b>platos a la carta</b> se preparan en cocina: aparecen en la carta pero no llevan stock. El stock de bebidas y snacks baja solo con cada venta. Usa <b>Cargar</b> para sumar lo que llega del proveedor y <b>Ajustar</b> cuando hagas conteo físico.</p>
   </section>
 
   <!-- ANALISIS -->
@@ -363,6 +368,10 @@ textarea.inp{width:100%;min-height:140px;font-family:var(--mono);font-size:12px}
 (() => {
 "use strict";
 const CATS = ["Bebidas","Comida","Snacks","Piscina"];
+const CAT_LABEL = {Comida: "Platos a la carta"};
+const catName = c => CAT_LABEL[c] || c;
+const isDish = p => !!p && p.cat === "Comida";
+const findCat = raw => { const t = String(raw||"").trim().toLowerCase(); return CATS.find(c => c.toLowerCase() === t || catName(c).toLowerCase() === t || (c === "Comida" && /^platos?/.test(t))); };
 const DIAS = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
 const WEEK_ORDER = [1,2,3,4,5,6,0];
 const HOURS = [];for(let h=7;h<=22;h++)HOURS.push(h);
@@ -467,7 +476,7 @@ function allSales(){
   return out;
 }
 function stockOf(p){
-  if (!p || p.track === false) return null;
+  if (!p || p.track === false || isDish(p)) return null;
   let sold = 0;
   for (const doc of Object.values(S.salesDocs)) for (const s of (doc.sales||[])) {
     if (s.ts <= (p.baseAt||0)) continue;
@@ -477,7 +486,7 @@ function stockOf(p){
 }
 function stockState(p){
   const st = stockOf(p);
-  if (st === null) return {k:"na", t:"Sin control", st};
+  if (st === null) return isDish(p) ? {k:"prep", t:"Se prepara", st} : {k:"na", t:"Sin control", st};
   if (st <= 0) return {k:"out", t:"Agotado", st};
   if (st <= (Number(p.min)||0)) return {k:"low", t:"Bajo", st};
   return {k:"ok", t:"OK", st};
@@ -489,7 +498,7 @@ function maybeRebase(meta){
   const limit = Date.now() - 60*864e5;
   Object.values(S.products).forEach(p => {
     if (p.track !== false && (p.baseAt||0) < limit) {
-      store.setProduct({...p, stockBase: stockOf(p), baseAt: Date.now()}).catch(()=>{});
+      (isDish(p) ? Promise.resolve() : store.setProduct({...p, stockBase: stockOf(p), baseAt: Date.now()})).catch(()=>{});
     }
   });
 }
@@ -581,13 +590,13 @@ $("#todayList").addEventListener("click", async e => {
 
 function renderGrid(){
   const cats = ["Todas", ...CATS];
-  $("#catChips").innerHTML = cats.map(c => `<button class="chip" data-cat="${c}" aria-pressed="${S.cat===c}">${c==="Todas"?"Todo":c}</button>`).join("");
+  $("#catChips").innerHTML = cats.map(c => `<button class="chip" data-cat="${c}" aria-pressed="${S.cat===c}">${c==="Todas"?"Todo":esc(catName(c))}</button>`).join("");
   const list = prodList().filter(p => p.active !== false && (S.cat === "Todas" || p.cat === S.cat));
   $("#pgrid").innerHTML = list.length ? list.map(p => {
     const s = stockState(p);
     return `<button class="pbtn ${s.k==="out"?"out":""}" style="--c:var(--cat-${esc(p.cat)},var(--ink-3))" data-code="${esc(p.code)}">
       <span class="code">${esc(p.code)}</span><span class="name">${esc(p.name)}</span>
-      <span class="foot"><span class="price">${money(p.price)}</span><span class="muted num">${s.st===null?"":s.k==="out"?"agotado":s.st+" disp."}</span></span></button>`;
+      <span class="foot"><span class="price">${money(p.price)}</span>${s.k==="prep"?'<span class="prep">A la carta</span>':`<span class="muted num">${s.st===null?"":s.k==="out"?"agotado":s.st+" disp."}</span>`}</span></button>`;
   }).join("") : `<div class="empty">${S.loadedP ? "No hay productos en esta categoría." : "Cargando productos…"}</div>`;
 }
 function renderTicket(){
@@ -619,6 +628,12 @@ function renderToday(){
 $("#invSearch").addEventListener("input", renderInv);
 $("#invCat").addEventListener("change", renderInv);
 $("#btnNew").onclick = () => openProduct(null);
+$("#btnNewDish").onclick = () => openProduct(null, "Comida");
+function nextCode(cat){
+  const pre = {Bebidas:"B", Comida:"C", Snacks:"S", Piscina:"P"}[cat] || "X";
+  let n = 0; Object.keys(S.products).forEach(k => { const m = k.match(new RegExp("^" + pre + "(\\d+)$")); if (m) n = Math.max(n, +m[1]); });
+  return pre + String(n + 1).padStart(2, "0");
+}
 $("#btnImport").onclick = () => openImport();
 $("#btnExpInv").onclick = exportInventory;
 $("#btnExpSales").onclick = () => exportSales(true);
@@ -637,7 +652,7 @@ function soldSince(days){
   return m;
 }
 function renderInv(){
-  const sel = $("#invCat"); if (sel.options.length === 1) CATS.forEach(c => sel.add(new Option(c, c)));
+  const sel = $("#invCat"); if (sel.options.length === 1) CATS.forEach(c => sel.add(new Option(catName(c), c)));
   const q = $("#invSearch").value.trim().toUpperCase(), cat = sel.value;
   const sold = soldSince(7);
   const all = prodList();
@@ -652,7 +667,7 @@ function renderInv(){
   const list = all.filter(p => (!cat || p.cat === cat) && (!q || p.code.includes(q) || p.name.toUpperCase().includes(q)));
   $("#invBody").innerHTML = list.length ? list.map(p => { const s = stockState(p); return `<tr>
     <td class="mono">${esc(p.code)}</td><td><b style="font-weight:600">${esc(p.name)}</b>${p.active===false?' <span class="pill na">oculto</span>':""}</td>
-    <td><span class="catcell"><i class="dot" style="background:var(--cat-${esc(p.cat)},var(--ink-3))"></i>${esc(p.cat)}</span></td>
+    <td><span class="catcell"><i class="dot" style="background:var(--cat-${esc(p.cat)},var(--ink-3))"></i>${esc(catName(p.cat))}</span></td>
     <td class="r mono">${money(p.price)}</td>
     <td class="r mono">${s.st===null?"—":s.st}</td>
     <td><span class="pill ${s.k}">${s.t}</span></td>
@@ -671,23 +686,30 @@ function sheet(html, onMount){
   function close(){ root.innerHTML = ""; document.removeEventListener("keydown", onKey); }
   onMount(bg.firstElementChild, close);
 }
-function openProduct(p){
+function openProduct(p, presetCat){
   const isNew = !p;
-  p = p || {code:"", name:"", cat:"Bebidas", price:"", stockBase:0, min:5, track:true, active:true};
-  sheet(`<h2>${isNew ? "Nuevo producto" : "Editar " + esc(p.code)}</h2>
+  if (!p) { const c = presetCat || "Bebidas"; p = {code: nextCode(c), name:"", cat:c, price:"", stockBase:0, min: c === "Comida" ? 0 : 5, track: c !== "Comida", active:true}; }
+  sheet(`<h2>${isNew ? (isDish(p) ? "Nuevo plato a la carta" : "Nuevo producto") : "Editar " + esc(p.code)}</h2>
     <form id="pf" class="fgrid">
       <label class="field"><span>Código</span><input class="inp mono" id="f-code" value="${esc(p.code)}" ${isNew?"":"disabled"} required placeholder="B09"></label>
-      <label class="field"><span>Categoría</span><select class="inp" id="f-cat">${CATS.map(c => `<option ${c===p.cat?"selected":""}>${c}</option>`).join("")}</select></label>
+      <label class="field"><span>Categoría</span><select class="inp" id="f-cat">${CATS.map(c => `<option value="${c}" ${c===p.cat?"selected":""}>${esc(catName(c))}</option>`).join("")}</select></label>
       <label class="field" style="grid-column:1/-1"><span>Nombre</span><input class="inp" id="f-name" value="${esc(p.name)}" required></label>
       <label class="field"><span>Precio de venta ($)</span><input class="inp mono" id="f-price" inputmode="decimal" value="${esc(p.price)}" required></label>
-      <label class="field"><span>Stock mínimo (alerta)</span><input class="inp mono" id="f-min" inputmode="numeric" value="${esc(p.min ?? 5)}"></label>
-      ${isNew ? `<label class="field"><span>Stock inicial</span><input class="inp mono" id="f-stock" inputmode="numeric" value="0"></label>` : ""}
-      <label class="row" style="grid-column:1/-1"><input type="checkbox" id="f-track" ${p.track!==false?"checked":""}> Controlar stock (desmarca para servicios como la entrada a la piscina)</label>
+      <label class="field stk"><span>Stock mínimo (alerta)</span><input class="inp mono" id="f-min" inputmode="numeric" value="${esc(p.min ?? 5)}"></label>
+      ${isNew ? `<label class="field stk"><span>Stock inicial</span><input class="inp mono" id="f-stock" inputmode="numeric" value="0"></label>` : ""}
+      <p class="muted dishnote" style="grid-column:1/-1;margin:0;font-size:13px">Plato preparado en cocina: se muestra en la carta y no lleva control de stock.</p>
+      <label class="row stk" style="grid-column:1/-1"><input type="checkbox" id="f-track" ${p.track!==false?"checked":""}> Controlar stock (desmarca para servicios como la entrada a la piscina)</label>
       <label class="row" style="grid-column:1/-1"><input type="checkbox" id="f-active" ${p.active!==false?"checked":""}> Mostrar en la pantalla de venta</label>
       <p class="scan-hint err" id="f-err" style="grid-column:1/-1;margin:0"></p>
       <div class="acts" style="grid-column:1/-1">${isNew?"":`<button type="button" class="btn danger" id="f-del" style="margin-right:auto">Eliminar</button>`}<button type="button" class="btn" id="f-cancel">Cancelar</button><button class="btn pri">Guardar</button></div>
     </form>`, (el, close) => {
       el.querySelector("#f-cancel").onclick = close;
+      const syncCat = () => { const dish = el.querySelector("#f-cat").value === "Comida";
+        el.querySelectorAll(".stk").forEach(x => x.hidden = dish); el.querySelector(".dishnote").hidden = !dish; };
+      syncCat();
+      el.querySelector("#f-cat").onchange = () => { syncCat();
+        if (isNew) { const fc = el.querySelector("#f-code"); if (!fc.dataset.touched) fc.value = nextCode(el.querySelector("#f-cat").value); } };
+      el.querySelector("#f-code").addEventListener("input", e => { e.target.dataset.touched = "1"; });
       const del = el.querySelector("#f-del");
       if (del) del.onclick = async () => {
         if (del.dataset.armed !== "1") { del.dataset.armed = "1"; del.textContent = "¿Eliminar de verdad?"; return; }
@@ -701,7 +723,8 @@ function openProduct(p){
         if (!code) return err("Escribe un código (letras y números).");
         if (isNew && S.products[code]) return err("Ya existe un producto con el código " + code + ".");
         if (!(price >= 0)) return err("El precio debe ser un número, por ejemplo 2.50.");
-        const track = el.querySelector("#f-track").checked;
+        const catV = el.querySelector("#f-cat").value;
+        const track = catV === "Comida" ? false : el.querySelector("#f-track").checked;
         const np = {...p, code, name: el.querySelector("#f-name").value.trim() || code, cat: el.querySelector("#f-cat").value,
           price: Math.round(price*100)/100, min: parseInt(el.querySelector("#f-min").value)||0, track, active: el.querySelector("#f-active").checked};
         if (isNew) { np.stockBase = parseInt(el.querySelector("#f-stock").value)||0; np.baseAt = Date.now(); }
@@ -744,7 +767,7 @@ function parseCsv(text){
 }
 function openImport(){
   sheet(`<h2>Cargar inventario desde archivo</h2>
-    <p class="muted" style="margin:0;font-size:14px">Columnas: <span class="mono">codigo, nombre, categoria, precio, stock, minimo</span>. Puedes exportar desde Excel como CSV. Los códigos existentes se actualizan y el stock se reemplaza por el del archivo.</p>
+    <p class="muted" style="margin:0;font-size:14px">Columnas: <span class="mono">codigo, nombre, categoria, precio, stock, minimo</span>. Categorías: Bebidas, Snacks, Piscina o Platos a la carta (estos no llevan stock: deja vacías esas columnas). Puedes exportar desde Excel como CSV. Los códigos existentes se actualizan y el stock se reemplaza por el del archivo.</p>
     <div class="row"><button class="btn" id="i-file">Elegir archivo CSV</button><span class="muted" id="i-name"></span></div>
     <label class="field"><span>…o pega las filas aquí</span><textarea class="inp" id="i-text" placeholder="B01,Coca-Cola 500 ml,Bebidas,1.00,48,12"></textarea></label>
     <p class="muted" id="i-prev" style="margin:0;font-size:13px"></p>
@@ -766,14 +789,15 @@ function openImport(){
         let n = 0;
         for (const r of rows) {
           const code = cleanCode(r[0]); const old = S.products[code] || {};
-          const catRaw = (r[2]||"").trim(); const cat = CATS.find(c => c.toLowerCase() === catRaw.toLowerCase()) || old.cat || "Comida";
+          const cat = findCat(r[2]) || old.cat || "Comida";
           const price = parseFloat(String(r[3]||"").replace(",", "."));
           const stock = parseInt(r[4]);
           const np = {track:true, active:true, min:5, ...old, code, name: r[1] || old.name || code, cat,
             price: isNaN(price) ? (old.price||0) : Math.round(price*100)/100};
-          if (!isNaN(stock)) { np.stockBase = stock; np.baseAt = Date.now(); np.track = true; }
+          if (cat === "Comida") { np.track = false; np.min = 0; np.stockBase = 0; np.baseAt = np.baseAt || Date.now(); }
+          else if (!isNaN(stock)) { np.stockBase = stock; np.baseAt = Date.now(); np.track = true; }
           else if (!old.code) { np.stockBase = 0; np.baseAt = Date.now(); }
-          if (r[5] !== undefined && r[5] !== "" && !isNaN(parseInt(r[5]))) np.min = parseInt(r[5]);
+          if (cat !== "Comida" && r[5] !== undefined && r[5] !== "" && !isNaN(parseInt(r[5]))) np.min = parseInt(r[5]);
           try { await store.setProduct(np); n++; } catch {}
         }
         close(); toast(n + " productos cargados");
@@ -798,13 +822,13 @@ async function offer(filename, text){
 }
 function exportInventory(){
   const rows = [["codigo","nombre","categoria","precio","stock","minimo","estado"]];
-  prodList().forEach(p => { const s = stockState(p); rows.push([p.code, p.name, p.cat, p.price.toFixed(2), s.st===null?"":s.st, p.min??"", s.t]); });
+  prodList().forEach(p => { const s = stockState(p); rows.push([p.code, p.name, catName(p.cat), (Number(p.price)||0).toFixed(2), s.st===null?"":s.st, p.min??"", s.t]); });
   offer("inventario-" + todayKey() + ".csv", rows.map(r => r.map(csvCell).join(",")).join("\n"));
 }
 function exportSales(useFilter){
   const list = useFilter ? filteredSales() : allSales();
   const rows = [["fecha","hora","ticket","codigo","producto","categoria","cantidad","precio","subtotal","pago","mesa"]];
-  list.sort((a,b) => a.ts - b.ts).forEach(s => s.items.forEach(i => rows.push([s._date, hhmm(s.ts), s.id, i.c, i.n, i.k, i.q, i.p.toFixed(2), (i.q*i.p).toFixed(2), s.pago||"", s.mesa||""])));
+  list.sort((a,b) => a.ts - b.ts).forEach(s => s.items.forEach(i => rows.push([s._date, hhmm(s.ts), s.id, i.c, i.n, catName(i.k), i.q, i.p.toFixed(2), (i.q*i.p).toFixed(2), s.pago||"", s.mesa||""])));
   const tag = useFilter ? rangeLabel().replace(/\s+/g,"-").toLowerCase() : "todo";
   offer("ventas-restaurante-campestre-" + tag + ".csv", rows.map(r => r.map(csvCell).join(",")).join("\n"));
 }
@@ -858,7 +882,7 @@ function top3(items, key = "q"){
 }
 
 function renderAn(){
-  const anSel = $("#anCat"); if (anSel.options.length === 1) CATS.forEach(c => anSel.add(new Option(c, c)));
+  const anSel = $("#anCat"); if (anSel.options.length === 1) CATS.forEach(c => anSel.add(new Option(catName(c), c)));
   $("#rangeChips").innerHTML = RANGES.map(([k,l]) => `<button class="chip" data-r="${k}" aria-pressed="${!S.day && S.range===k}">${l}</button>`).join("");
   const hasDemo = Object.values(S.salesDocs).some(d => d.demo);
   $("#demoBanner").innerHTML = hasDemo ? `<div class="banner" style="margin-bottom:12px"><span><b>Datos de ejemplo.</b> Estas ventas son de muestra para que veas cómo funciona el análisis. Bórralas antes de empezar a vender de verdad.</span><button class="btn sm danger" style="margin-left:auto">Borrar ejemplos</button></div>` : "";
@@ -909,7 +933,7 @@ function renderAn(){
   $("#topSub").textContent = rk.length ? units + " unidades en " + rangeLabel() : "";
   $("#top").innerHTML = rk.length ? rk.map(x => { const v = S.topMode === "u" ? x.q : x.v; return `<div class="hb" data-tip="${esc(x.n + " · " + x.q + " u · " + money(x.v))}">
       <span class="n">${esc(x.n)}</span><span class="track"><span class="fill" style="width:${v/tmax*100}%;--c:var(--cat-${esc(x.k)},var(--pool))"></span></span><span class="v">${S.topMode==="u"?x.q:money0(x.v)}</span></div>`; }).join("")
-    + `<div class="legend">${CATS.map(c => `<i style="background:var(--cat-${c})"></i>${c}&nbsp;&nbsp;`).join("")}</div>`
+    + `<div class="legend">${CATS.map(c => `<i style="background:var(--cat-${c})"></i>${esc(catName(c))}&nbsp;&nbsp;`).join("")}</div>`
     : `<div class="empty">Sin ventas en este periodo.</div>`;
 
   // by hour (aggregate)
@@ -931,8 +955,8 @@ function renderAn(){
   // categories
   const byC = {}; items.forEach(i => byC[i.k] = (byC[i.k]||0) + i.v);
   const ctot = Object.values(byC).reduce((s,v) => s+v, 0);
-  $("#cats").innerHTML = ctot ? `<div class="stack">${CATS.filter(c => byC[c]).map(c => `<div style="width:${byC[c]/ctot*100}%;background:var(--cat-${c})" data-tip="${c} · ${money(byC[c])}"></div>`).join("")}</div>
-    <div class="catlist">${CATS.map(c => `<div><i class="dot" style="background:var(--cat-${c})"></i><span>${c}</span><span class="mono muted">${Math.round((byC[c]||0)/ctot*100)}%</span><span class="mono" style="min-width:70px;text-align:right">${money0(byC[c]||0)}</span></div>`).join("")}</div>`
+  $("#cats").innerHTML = ctot ? `<div class="stack">${CATS.filter(c => byC[c]).map(c => `<div style="width:${byC[c]/ctot*100}%;background:var(--cat-${c})" data-tip="${esc(catName(c))} · ${money(byC[c])}"></div>`).join("")}</div>
+    <div class="catlist">${CATS.map(c => `<div><i class="dot" style="background:var(--cat-${c})"></i><span>${esc(catName(c))}</span><span class="mono muted">${Math.round((byC[c]||0)/ctot*100)}%</span><span class="mono" style="min-width:70px;text-align:right">${money0(byC[c]||0)}</span></div>`).join("")}</div>`
     : `<div class="empty">Sin ventas en este periodo.</div>`;
 
   // per day star
